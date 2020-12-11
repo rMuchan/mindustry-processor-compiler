@@ -168,12 +168,18 @@ def _create_expr_parser(sub_expr_parser: Callable[[], Expression], set_bool: Opt
 
 def unary_exp() -> Expression:
     operations = []
+    double_not = ()
     while _peek() in {TokenType.AddOp, TokenType.SubOp, TokenType.BNotOp, TokenType.LNotOp}:
         op = lex.read().type_
         if op == TokenType.AddOp:
             pass
         elif operations and operations[-1] == op:
-            operations.pop()
+            if op == TokenType.LNotOp:
+                operations[-1] = double_not
+            else:
+                operations.pop()
+        elif op == TokenType.LNotOp and operations and operations[-1] is double_not:
+            operations[-1] = op
         else:
             operations.append(op)
     exp = base_exp()
@@ -184,6 +190,9 @@ def unary_exp() -> Expression:
             exp = exp.combine('flip', Expression.zero(), False)
         elif op == TokenType.LNotOp:
             exp = exp.combine('==', Expression.zero(), True, convert_operand=False)
+            exp.type_is_bool = True
+        elif op is double_not:
+            exp = exp.combine('not', Expression.zero(), True, convert_operand=False)
             exp.type_is_bool = True
     return exp
 
