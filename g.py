@@ -1,6 +1,7 @@
 from typing import TextIO
 
 file: TextIO
+context: list = []
 
 
 class ParseError(Exception):
