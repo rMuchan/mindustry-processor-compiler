@@ -9,7 +9,7 @@ Program := { Function } MainProcedure
 Function := 'def' Identifier '(' ParamList ')' '{' StmtList '}'
 ParamList := [ Identifier { ',' Identifier } ]
 StmtList := { Statement }
-Statement := [ AssignStmt | CondStmt | LoopStmt | ReturnStmt | 'break' | 'continue' ] [ ';' ] | RawStmt | '{' StmtList '}'
+Statement := [ AssignStmt | ReturnStmt | 'break' | 'continue' ] [ ';' ] | CondStmt | LoopStmt | RawStmt | '{' StmtList '}'
 AssignStmt := Identifier '=' Expression
 CondStmt := 'if' '(' Expression ')' Statement [ 'else' Statement ]
 LoopStmt := 'while' '(' Expression ')' Statement
@@ -26,7 +26,7 @@ ShiftExp := PlusExp { ( '<<' | '>>' ) PlusExp }
 PlusExp := MulExp { ( '+' | '-' ) MulExp }
 MulExp := PowExp { ( '*' | '/' | '%' | '//' ) PowExp }
 PowExp := UnaryExp { '**' UnaryExp }
-UnaryExp := { '-' | '~' | '!' } BaseExp
+UnaryExp := { '+' | '-' | '~' | '!' } BaseExp
 BaseExp := Identifier | '(' Expression ')' | NumLiteral | Call
 Call := Identifier '(' ArgList ')'
 ArgList := [ Expression { ',' Expression } ]
@@ -76,21 +76,22 @@ MindC provides several functions. They are actually compiled to `operation` inst
 Unary functions:
 
 - `abs`, `sin`, `cos`, `tan`, `floor`, `ceil`, `sqrt`: As their names state
-- `lg`: Base-10 logarithm
-- `ln`: Natural logarithm
+- `log10`: Base-10 logarithm
+- `log`: Natural logarithm
 - `rand(x)`: Generate a random number between 0 and x
 
 Binary functions:
 
-- `max`, `min`, `atan2`: As their names state
+- `max`, `min`, `atan2`, `noise`: As their names state
 - `dst(x, y)`: Compute `sqrt(x*x+y*y)`
 
 All trigonometric functions are in degrees.
 
 ## Note
 
+- **All variables are global.** Function parameters are simply syntactic sugar for assigning them. That's because it would be a great cost to identify variables used in raw instructions and to protect them.
 - A lowercase word followed by an integer is a valid identifier, but may be buildings connected to the processor. Use with care.
 - Values assigned to variable `_` will be ignored.
-- Logical shortcut is not supported, i.e. all clauses will be evaluated.
+- **Logical shortcut is not supported**, i.e. all clauses will be evaluated.
 - Function invocation statements are not supported. Assign its return value to `_` instead.
 - Functions are not ready for invocation until fully defined, which implies recursion is not supported.
