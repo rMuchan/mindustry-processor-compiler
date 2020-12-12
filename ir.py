@@ -1,4 +1,7 @@
+from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Tuple, Union
+
+import g
 
 
 class Program:
@@ -7,6 +10,14 @@ class Program:
 
     def __init__(self):
         self.functions = {}
+
+    def generate(self):
+        for stmt in self.main_procedure:
+            stmt.generate()
+        if self.functions:
+            _emit('end')
+            for func in self.functions.values():
+                func.generate()
 
 
 class Function:
@@ -19,20 +30,45 @@ class Function:
         self.home_label = Label()
         self.param = []
 
+    def generate(self):
+        self.home_label.generate()
+        for stmt in self.statements:
+            stmt.generate()
 
-class Statement:
-    ...
+
+class Statement(ABC):
+    @abstractmethod
+    def generate(self): pass
 
 
 class AssignStmt(Statement):
     target: str
     value: 'Expression'
 
+    def generate(self):
+        self.value.generate(self.target)
+
 
 class CondStmt(Statement):
     condition: 'Expression'
     match: Statement
     mismatch: Optional[Statement] = None
+
+    def generate(self):
+        if self.mismatch is not None:
+            mismatch_label = Label()
+            end_label = Label()
+            self.condition.generate_condition(mismatch_label, invert=True)
+            self.match.generate()
+            _emit('jump {} always', end_label)
+            mismatch_label.generate()
+            self.mismatch.generate()
+            end_label.generate()
+        else:
+            end_label = Label()
+            self.condition.generate_condition(end_label, invert=True)
+            self.match.generate()
+            end_label.generate()
 
 
 class LoopStmt(Statement):
@@ -45,26 +81,50 @@ class LoopStmt(Statement):
         self.home_label = Label()
         self.end_label = Label()
 
+    def generate(self):
+        self.home_label.generate()
+        self.condition.generate_condition(self.end_label, invert=True)
+        self.body.generate()
+        _emit('jump {} always', self.home_label)
+        self.end_label.generate()
+
 
 class ReturnStmt(Statement):
     value: Optional['Expression'] = None
     belong_func: Function
 
+    def generate(self):
+        name = self.belong_func.name
+        if self.value is not None:
+            self.value.generate(f'$ret${name}')
+        _emit(f'set @counter $ra${name}')
+
 
 class JumpStmt(Statement):
     target: 'Label'
+
+    def generate(self):
+        _emit('jump {} always', self.target)
 
 
 class RawStmt(Statement):
     inst: str
 
+    def generate(self):
+        _emit(self.inst)
+
 
 class CompoundStmt(Statement):
     stmts: List[Statement]
 
+    def generate(self):
+        for stmt in self.stmts:
+            stmt.generate()
+
 
 class EmptyStmt(Statement):
-    pass
+    def generate(self):
+        pass
 
 
 class Expression:
@@ -72,19 +132,20 @@ class Expression:
     # the un-parameterized "tuple" is a reference to another node
     NormalInstNode = Tuple[str, Union[str, tuple], Union[str, tuple]]
     # function call: (None, function name, arguments)
-    FuncCallNode = Tuple[None, str, List[Tuple[str, 'Expression']]]
+    FuncCallNode = Tuple[None, Function, List[Tuple[str, 'Expression']]]
+    NodeType = Union[str, NormalInstNode, FuncCallNode]
 
-    value: Union[str, NormalInstNode, FuncCallNode]
+    value: NodeType
     # not all bool expressions must be converted to 0/1 immediately, e.g. operands of logical operators.
     # the next two fields attempt to convert them as needed.
     type_is_bool: bool = False  # whether this expr is expected to return a bool value
     value_is_bool: bool = False  # whether this expr actually returns a bool value
 
-    def __init__(self, value: Union[str, NormalInstNode], args: List[Tuple[str, 'Expression']] = None):
+    def __init__(self, value: Union[NodeType, Function], args: List[Tuple[str, 'Expression']] = None):
         if args is None:
             self.value = value
         else:
-            assert isinstance(value, str)
+            assert isinstance(value, Function)
             self.value = (None, value, args)
 
     @staticmethod
@@ -130,6 +191,83 @@ class Expression:
             exp.value_is_bool = set_bool
         return exp
 
+    def generate(self, target: str):
+        Expression._generate_node(target, self.value)
+
+    def generate_condition(self, label: 'Label', invert: bool):
+        if isinstance(self.value, str):
+            cond = 'equal' if invert else 'notEqual'
+            _emit(f'jump {{}} {cond} {self.value} 0', label)
+            return
+
+        invert_map = {
+            'equal': 'notEqual',
+            'notEqual': 'equal',
+            'lessThan': 'greaterThanEq',
+            'lessThanEq': 'greaterThan',
+            'greaterThan': 'lessThanEq',
+            'greaterThanEq': 'lessThan'
+        }
+
+        inst, opr1, opr2 = self.value
+        if inst in invert_map:  # last instruction is comparison
+            var1 = Expression._generate_child(opr1)
+            var2 = Expression._generate_child(opr2)
+            cond = invert_map[inst] if invert else inst
+            _emit(f'jump {{}} {cond} {var1} {var2}', label)
+        else:  # last instruction is computation or function invocation
+            var = _get_next_temp()
+            Expression._generate_node(var, self.value)
+            cond = 'equal' if invert else 'notEqual'
+            _emit(f'jump {{}} {cond} {var} 0', label)
+
+    @staticmethod
+    def _generate_node(target: str, expr: NodeType):
+        if isinstance(expr, str):
+            _emit(f'set {target} {expr}')
+            return
+        inst, opr1, opr2 = expr
+        if inst is not None:  # instruction
+            opr1: Union[str, tuple]
+            opr2: Union[str, tuple]
+            var1 = Expression._generate_child(opr1)
+            var2 = Expression._generate_child(opr2)
+            if target != '_':
+                _emit(f'op {inst} {target} {var1} {var2}')
+        else:  # function
+            opr1: Function
+            opr2: List[Tuple[str, 'Expression']]
+            for param_name, arg in opr2:
+                arg.generate(param_name)
+            _emit(f'op add $ra${opr1.name} @counter 1')
+            _emit('jump {} always', opr1.home_label)
+            if target != '_':
+                _emit(f'set {target} $ret${opr1.name}')
+
+    @staticmethod
+    def _generate_child(opr: NodeType) -> str:
+        if isinstance(opr, str):
+            return opr
+        var = _get_next_temp()
+        Expression._generate_node(var, opr)
+        return var
+
 
 class Label:
-    ...
+    inst: int
+
+    def generate(self):
+        self.inst = len(g.code)
+
+
+_temp_var_num = 0
+
+
+def _get_next_temp() -> str:
+    global _temp_var_num
+    _temp_var_num += 1
+    return f'$tmp${_temp_var_num}'
+
+
+def _emit(instruction: str, label: Label = None):
+    g.code.append((instruction, label))

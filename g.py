@@ -1,7 +1,8 @@
-from typing import TextIO
+from typing import TextIO, List, Tuple, Any
 
 file: TextIO
 context: list = []
+code: List[Tuple[str, Any]] = []  # type of the 2nd component is Optional[ir.Label]
 
 
 class ParseError(Exception):
