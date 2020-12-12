@@ -185,38 +185,38 @@ def unary_exp() -> Expression:
     exp = base_exp()
     for op in reversed(operations):
         if op == TokenType.SubOp:
-            exp = Expression.zero().combine('-', exp, False)
+            exp = Expression.zero().combine('sub', exp, False)
         elif op == TokenType.BNotOp:
-            exp = exp.combine('flip', Expression.zero(), False)
+            exp = exp.combine('not', Expression.zero(), False)
         elif op == TokenType.LNotOp:
-            exp = exp.combine('==', Expression.zero(), True, convert_operand=False)
+            exp = exp.combine('equal', Expression.zero(), True, convert_operand=False)
             exp.type_is_bool = True
         elif op is double_not:
-            exp = exp.combine('not', Expression.zero(), True, convert_operand=False)
+            exp = exp.combine('notEqual', Expression.zero(), True, convert_operand=False)
             exp.type_is_bool = True
     return exp
 
 
-pow_exp = _create_expr_parser(unary_exp, None, {TokenType.PowOp: '^'})
+pow_exp = _create_expr_parser(unary_exp, None, {TokenType.PowOp: 'pow'})
 mul_exp = _create_expr_parser(pow_exp, None, {
-    TokenType.MulOp: '*',
-    TokenType.DivOp: '/',
-    TokenType.ModOp: '%',
-    TokenType.FloorDivOp: '//'
+    TokenType.MulOp: 'mul',
+    TokenType.DivOp: 'div',
+    TokenType.ModOp: 'mod',
+    TokenType.FloorDivOp: 'idiv'
 })
-plus_exp = _create_expr_parser(mul_exp, False, {TokenType.AddOp: '+', TokenType.SubOp: '-'})
-shift_exp = _create_expr_parser(plus_exp, False, {TokenType.LShiftOp: '<<', TokenType.RShiftOp: '>>'})
+plus_exp = _create_expr_parser(mul_exp, False, {TokenType.AddOp: 'add', TokenType.SubOp: 'sub'})
+shift_exp = _create_expr_parser(plus_exp, False, {TokenType.LShiftOp: 'shl', TokenType.RShiftOp: 'shr'})
 comp_exp = _create_expr_parser(shift_exp, True, {
-    TokenType.LtOp: '<',
-    TokenType.GtOp: '>',
-    TokenType.LeqOp: '<=',
-    TokenType.GeqOp: '>='
+    TokenType.LtOp: 'lessThan',
+    TokenType.GtOp: 'greaterThan',
+    TokenType.LeqOp: 'lessThanEq',
+    TokenType.GeqOp: 'greaterThanEq'
 }, True)
-eq_exp = _create_expr_parser(comp_exp, True, {TokenType.EqOp: '==', TokenType.NeqOp: 'not'}, True)
-b_and_exp = _create_expr_parser(eq_exp, None, {TokenType.BAndOp: 'b-and'})
+eq_exp = _create_expr_parser(comp_exp, True, {TokenType.EqOp: 'equal', TokenType.NeqOp: 'notEqual'}, True)
+b_and_exp = _create_expr_parser(eq_exp, None, {TokenType.BAndOp: 'and'})
 b_xor_exp = _create_expr_parser(b_and_exp, None, {TokenType.BXorOp: 'xor'})
 b_or_exp = _create_expr_parser(b_xor_exp, None, {TokenType.BOrOp: 'or'})
-l_and_exp = _create_expr_parser(b_or_exp, True, {TokenType.LAndOp: 'and'}, True, convert_operand=False)
+l_and_exp = _create_expr_parser(b_or_exp, True, {TokenType.LAndOp: 'land'}, True, convert_operand=False)
 l_or_exp = _create_expr_parser(l_and_exp, None, {TokenType.LOrOp: 'or'}, True, convert_operand=False)
 
 
