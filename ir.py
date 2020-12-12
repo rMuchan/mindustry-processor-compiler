@@ -18,6 +18,8 @@ class Program:
             _emit('end')
             for func in self.functions.values():
                 func.generate()
+        if len(g.code) == Label.last_label:
+            _emit('noop')
 
 
 class Function:
@@ -274,9 +276,11 @@ class Expression:
 
 class Label:
     inst: int
+    last_label: int = -1
 
     def generate(self):
         self.inst = len(g.code)
+        Label.last_label = self.inst
 
 
 _temp_var_num = 0
