@@ -37,8 +37,18 @@ class Function:
 
 
 class Statement(ABC):
+    _returns_cache: Optional[bool] = None
+
     @abstractmethod
     def generate(self): pass
+
+    def returns(self) -> bool:
+        if self._returns_cache is None:
+            self._returns_cache = self._returns()
+        return self._returns_cache
+
+    def _returns(self) -> bool:
+        return False
 
 
 class AssignStmt(Statement):
@@ -70,6 +80,9 @@ class CondStmt(Statement):
             self.match.generate()
             end_label.generate()
 
+    def _returns(self) -> bool:
+        return self.mismatch and self.match.returns() and self.mismatch.returns()
+
 
 class LoopStmt(Statement):
     home_label: 'Label'
@@ -99,6 +112,9 @@ class ReturnStmt(Statement):
             self.value.generate(f'$ret${name}')
         _emit(f'set @counter $ra${name}')
 
+    def _returns(self) -> bool:
+        return True
+
 
 class JumpStmt(Statement):
     target: 'Label'
@@ -120,6 +136,9 @@ class CompoundStmt(Statement):
     def generate(self):
         for stmt in self.stmts:
             stmt.generate()
+
+    def _returns(self) -> bool:
+        return any(x.returns() for x in self.stmts)
 
 
 class EmptyStmt(Statement):

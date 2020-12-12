@@ -40,6 +40,10 @@ def function() -> Function:
     _expect(TokenType.LBrace)
     g.context.append(func)
     func.statements = stmt_list()
+    if not any(x.returns() for x in func.statements):
+        stmt = ReturnStmt()
+        stmt.belong_func = func
+        func.statements.append(stmt)
     g.context.pop()
     _expect(TokenType.RBrace)
     return func
