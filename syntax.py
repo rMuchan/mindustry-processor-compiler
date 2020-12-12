@@ -1,6 +1,5 @@
 from typing import Callable
 
-import g
 import lex
 from ir import *
 from lex import Token, TokenType
@@ -77,7 +76,7 @@ def assign_stmt() -> Statement:
     stmt = AssignStmt()
     stmt.target = _expect(TokenType.Identifier).value
     _expect(TokenType.AssignOp)
-    stmt.value = expression()
+    stmt.value = expression().convert_to_bool()
     return stmt
 
 
@@ -115,7 +114,7 @@ def return_stmt() -> Statement:
     stmt.belong_func = func
     if _peek() in {TokenType.SubOp, TokenType.BNotOp, TokenType.LNotOp, TokenType.Identifier,
                    TokenType.LPara, TokenType.Number}:
-        stmt.value = expression()
+        stmt.value = expression().convert_to_bool()
     return stmt
 
 
@@ -262,7 +261,7 @@ def call(func_name_tk: Token) -> Expression:
             if not is_first:
                 lex.read()
             is_first = False
-            arg = expression()
+            arg = expression().convert_to_bool()
             args.append(arg)
     r_para = _expect(TokenType.RPara)
 
@@ -280,7 +279,7 @@ def call(func_name_tk: Token) -> Expression:
         second_operand = args[1] if param_num == 2 else Expression.zero()
         return exp.combine(func_name, second_operand, set_bool)
     else:  # custom function
-        return Expression(func_name_tk.value, list(zip(func.param, args)))
+        return Expression(func, list(zip(func.param, args)))
 
 
 _builtin_functions = {
