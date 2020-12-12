@@ -258,8 +258,13 @@ class Expression:
         else:  # function
             opr1: Function
             opr2: List[Tuple[str, 'Expression']]
+            tmp_vars = []
             for param_name, arg in opr2:
-                arg.generate(param_name)
+                var = _get_next_temp()
+                arg.generate(var)
+                tmp_vars.append((param_name, var))
+            for param_name, var in tmp_vars:
+                _emit(f'set {param_name} {var}')
             _emit(f'op add $ra${opr1.name} @counter 1')
             _emit('jump {} always', opr1.home_label)
             if target != '_':
