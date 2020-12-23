@@ -6,6 +6,8 @@
 
 [示例程序](docs/example-zh.md)
 
+[另一个示例程序](docs/example2-zh.md)
+
 ## 用法
 
 本项目依赖Python 3。入口点是`mindc.py`，接受恰好一个参数，指定源文件。例如，编译`source.txt`中存储的程序，可以在命令行中运行下面的命令：

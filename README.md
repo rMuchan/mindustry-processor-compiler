@@ -8,6 +8,8 @@ This project defines a language that compiles to Mindustry processor instruction
 
 [An Example](docs/example.md)
 
+[Another Example](docs/example2.md)
+
 ## Usage
 
 This project requires python3. The entry point is `mindc.py`. It accepts exactly one argument, specifying the source file. For example, to compile a program stored in `source.txt`, run following commands from Terminal:
