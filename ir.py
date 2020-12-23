@@ -152,8 +152,8 @@ class Expression:
     # normal instruction: (instruction name, operand 1, operand 2)
     # the un-parameterized "tuple" is a reference to another node
     NormalInstNode = Tuple[str, Union[str, tuple], Union[str, tuple]]
-    # function call: (None, function name, arguments)
-    FuncCallNode = Tuple[None, Function, List[Tuple[str, 'Expression']]]
+    # function call: (function name, arguments, None)
+    FuncCallNode = Tuple[Function, List['Expression'], None]
     NodeType = Union[str, NormalInstNode, FuncCallNode]
 
     value: NodeType
@@ -162,12 +162,12 @@ class Expression:
     type_is_bool: bool = False  # whether this expr is expected to return a bool value
     value_is_bool: bool = False  # whether this expr actually returns a bool value
 
-    def __init__(self, value: Union[NodeType, Function], args: List[Tuple[str, 'Expression']] = None):
+    def __init__(self, value: Union[NodeType, Function], args: List['Expression'] = None):
         if args is None:
             self.value = value
         else:
             assert isinstance(value, Function)
-            self.value = (None, value, args)
+            self.value = (value, args, None)
 
     @staticmethod
     def zero():
@@ -248,7 +248,7 @@ class Expression:
             _emit(f'set {target} {expr}')
             return
         inst, opr1, opr2 = expr
-        if inst is not None:  # instruction
+        if isinstance(inst, str):  # instruction
             opr1: Union[str, tuple]
             opr2: Union[str, tuple]
             var1 = Expression._generate_child(opr1)
@@ -256,19 +256,19 @@ class Expression:
             if target != '_':
                 _emit(f'op {inst} {target} {var1} {var2}')
         else:  # function
-            opr1: Function
-            opr2: List[Tuple[str, 'Expression']]
+            inst: Function
+            opr1: List['Expression']
             tmp_vars = []
-            for param_name, arg in opr2:
+            for arg in opr1:
                 var = _get_next_temp()
                 arg.generate(var)
-                tmp_vars.append((param_name, var))
-            for param_name, var in tmp_vars:
+                tmp_vars.append(var)
+            for param_name, var in zip(inst.param, tmp_vars):
                 _emit(f'set {param_name} {var}')
-            _emit(f'op add $ra${opr1.name} @counter 1')
-            _emit('jump {} always', opr1.home_label)
+            _emit(f'op add $ra${inst.name} @counter 1')
+            _emit('jump {} always', inst.home_label)
             if target != '_':
-                _emit(f'set {target} $ret${opr1.name}')
+                _emit(f'set {target} $ret${inst.name}')
 
     @staticmethod
     def _generate_child(opr: NodeType) -> str:

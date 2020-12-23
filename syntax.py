@@ -283,7 +283,7 @@ def call(func_name_tk: Token) -> Expression:
         second_operand = args[1] if param_num == 2 else Expression.zero()
         return exp.combine(func_name, second_operand, set_bool)
     else:  # custom function
-        return Expression(func, list(zip(func.param, args)))
+        return Expression(func, args)
 
 
 _builtin_functions = {
