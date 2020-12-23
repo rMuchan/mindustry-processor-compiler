@@ -48,7 +48,9 @@ This feature implies that MindC is almost compatible with native Mindustry langu
 
 ### Memory Access
 
-MindC provides array syntax to cooperate with memory cells/banks. The identifier before bracket shall be a memory cell/bank linked to the processor. For example, the following source code:
+MindC provides array syntax to cooperate with memory cells/banks. The identifier before bracket shall be a memory cell/bank linked to the processor. The index can be any valid expression, but should evaluate to a number within bounds to function properly.
+
+For example, the following source code:
 
 ```
 temp = cell1[42]

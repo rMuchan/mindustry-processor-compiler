@@ -1,6 +1,6 @@
 # Mindustry Processor Compiler
 
-[中文版README](README-zh.md)
+[中文版文档](README-zh.md)
 
 This project defines a language that compiles to Mindustry processor instructions.
 
