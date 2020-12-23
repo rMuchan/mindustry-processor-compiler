@@ -22,6 +22,8 @@ class TokenType(Enum):
 
     LPara = '('
     RPara = ')'
+    LBracket = '['
+    RBracket = ']'
     LBrace = '{'
     RBrace = '}'
     Comma = ','

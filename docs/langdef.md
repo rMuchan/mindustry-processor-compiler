@@ -10,7 +10,8 @@ Function := 'def' Identifier '(' ParamList ')' '{' StmtList '}'
 ParamList := [ Identifier { ',' Identifier } ]
 StmtList := { Statement }
 Statement := [ AssignStmt | ReturnStmt | 'break' | 'continue' ] [ ';' ] | CondStmt | LoopStmt | RawStmt | '{' StmtList '}'
-AssignStmt := Identifier '=' Expression
+AssignStmt := LValue '=' Expression
+LValue := Identifier [ '[' Expression ']' ]
 CondStmt := 'if' '(' Expression ')' Statement [ 'else' Statement ]
 LoopStmt := 'while' '(' Expression ')' Statement
 ReturnStmt := 'return' [ Expression ]
@@ -27,7 +28,7 @@ PlusExp := MulExp { ( '+' | '-' ) MulExp }
 MulExp := PowExp { ( '*' | '/' | '%' | '//' ) PowExp }
 PowExp := UnaryExp { '**' UnaryExp }
 UnaryExp := { '+' | '-' | '~' | '!' } BaseExp
-BaseExp := Identifier | '(' Expression ')' | NumLiteral | Call
+BaseExp := LValue | '(' Expression ')' | NumLiteral | Call
 Call := Identifier '(' ArgList ')'
 ArgList := [ Expression { ',' Expression } ]
 MainProcedure := StmtList
@@ -44,6 +45,22 @@ Where:
 It just doesn't make sense to create a different syntax for each functionality supported by Mindustry, so we introduce raw statements. A raw statement starts with a `$` (and optional whitespaces), and terminates at the end of that line. Characters between them are output untransformed.
 
 This feature implies that MindC is almost compatible with native Mindustry language: simply add a `$` at the beginning of each line, and you got a valid MindC program. That operation can be easily done with editors like VS Code or command line tools like sed.
+
+### Memory Access
+
+MindC provides array syntax to cooperate with memory cells/banks. The identifier before bracket shall be a memory cell/bank linked to the processor. For example, the following source code:
+
+```
+temp = cell1[42]
+bank1[0] = temp
+```
+
+Will be compiled to:
+
+```
+read temp cell1 42
+write temp bank1 0
+```
 
 ### Semicolons
 

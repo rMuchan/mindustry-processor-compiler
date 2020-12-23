@@ -55,10 +55,16 @@ class Statement(ABC):
 
 class AssignStmt(Statement):
     target: str
+    index: Optional['Expression'] = None
     value: 'Expression'
 
     def generate(self):
-        self.value.generate(self.target)
+        if self.index is None:
+            self.value.generate(self.target)
+        else:
+            value_var = Expression.generate_child(self.value)
+            index_var = Expression.generate_child(self.index)
+            _emit(f'write {value_var} {self.target} {index_var}')
 
 
 class CondStmt(Statement):
@@ -154,7 +160,9 @@ class Expression:
     NormalInstNode = Tuple[str, Union[str, tuple], Union[str, tuple]]
     # function call: (function name, arguments, None)
     FuncCallNode = Tuple[Function, List['Expression'], None]
-    NodeType = Union[str, NormalInstNode, FuncCallNode]
+    # memory load: ((), cell link, index)
+    MemoryLoadNode = Tuple[tuple, str, 'Expression']
+    NodeType = Union[str, NormalInstNode, FuncCallNode, MemoryLoadNode]
 
     value: NodeType
     # not all bool expressions must be converted to 0/1 immediately, e.g. operands of logical operators.
@@ -175,6 +183,10 @@ class Expression:
         exp.type_is_bool = True
         exp.value_is_bool = True
         return exp
+
+    @staticmethod
+    def memory_load(cell: str, index: 'Expression'):
+        return Expression(((), cell, index))
 
     def convert_to_bool(self) -> 'Expression':
         """
@@ -232,8 +244,8 @@ class Expression:
 
         inst, opr1, opr2 = self.value
         if inst in invert_map:  # last instruction is comparison
-            var1 = Expression._generate_child(opr1)
-            var2 = Expression._generate_child(opr2)
+            var1 = Expression.generate_child(opr1)
+            var2 = Expression.generate_child(opr2)
             cond = invert_map[inst] if invert else inst
             _emit(f'jump {{}} {cond} {var1} {var2}', label)
         else:  # last instruction is computation or function invocation
@@ -251,17 +263,16 @@ class Expression:
         if isinstance(inst, str):  # instruction
             opr1: Union[str, tuple]
             opr2: Union[str, tuple]
-            var1 = Expression._generate_child(opr1)
-            var2 = Expression._generate_child(opr2)
+            var1 = Expression.generate_child(opr1)
+            var2 = Expression.generate_child(opr2)
             if target != '_':
                 _emit(f'op {inst} {target} {var1} {var2}')
-        else:  # function
+        elif isinstance(inst, Function):  # function
             inst: Function
             opr1: List['Expression']
             tmp_vars = []
             for arg in opr1:
-                var = _get_next_temp()
-                arg.generate(var)
+                var = Expression.generate_child(arg)
                 tmp_vars.append(var)
             for param_name, var in zip(inst.param, tmp_vars):
                 _emit(f'set {param_name} {var}')
@@ -269,9 +280,16 @@ class Expression:
             _emit('jump {} always', inst.home_label)
             if target != '_':
                 _emit(f'set {target} $ret${inst.name}')
+        else:  # memory load
+            opr1: str
+            opr2: 'Expression'
+            var = Expression.generate_child(opr2)
+            _emit(f'read {target} {opr1} {var}')
 
     @staticmethod
-    def _generate_child(opr: NodeType) -> str:
+    def generate_child(opr: Union[NodeType, 'Expression']) -> str:
+        if isinstance(opr, Expression):
+            opr = opr.value
         if isinstance(opr, str):
             return opr
         var = _get_next_temp()

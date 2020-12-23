@@ -79,6 +79,10 @@ def statement() -> Statement:
 def assign_stmt() -> Statement:
     stmt = AssignStmt()
     stmt.target = _expect(TokenType.Identifier).value
+    if _peek() == TokenType.LBracket:
+        lex.read()
+        stmt.index = expression().convert_to_bool()
+        _expect(TokenType.RBracket)
     _expect(TokenType.AssignOp)
     stmt.value = expression().convert_to_bool()
     return stmt
@@ -237,6 +241,11 @@ def base_exp() -> Expression:
         tk = lex.read()
         if _peek() == TokenType.LPara:
             return call(tk)
+        elif _peek() == TokenType.LBracket:
+            lex.read()
+            index = expression().convert_to_bool()
+            _expect(TokenType.RBracket)
+            return Expression.memory_load(tk.value, index)
         else:
             return Expression(tk.value)
     else:

@@ -10,7 +10,8 @@ Function := 'def' Identifier '(' ParamList ')' '{' StmtList '}'
 ParamList := [ Identifier { ',' Identifier } ]
 StmtList := { Statement }
 Statement := [ AssignStmt | ReturnStmt | 'break' | 'continue' ] [ ';' ] | CondStmt | LoopStmt | RawStmt | '{' StmtList '}'
-AssignStmt := Identifier '=' Expression
+AssignStmt := LValue '=' Expression
+LValue := Identifier [ '[' Expression ']' ]
 CondStmt := 'if' '(' Expression ')' Statement [ 'else' Statement ]
 LoopStmt := 'while' '(' Expression ')' Statement
 ReturnStmt := 'return' [ Expression ]
@@ -27,7 +28,7 @@ PlusExp := MulExp { ( '+' | '-' ) MulExp }
 MulExp := PowExp { ( '*' | '/' | '%' | '//' ) PowExp }
 PowExp := UnaryExp { '**' UnaryExp }
 UnaryExp := { '+' | '-' | '~' | '!' } BaseExp
-BaseExp := Identifier | '(' Expression ')' | NumLiteral | Call
+BaseExp := LValue | '(' Expression ')' | NumLiteral | Call
 Call := Identifier '(' ArgList ')'
 ArgList := [ Expression { ',' Expression } ]
 MainProcedure := StmtList
@@ -44,6 +45,22 @@ MainProcedure := StmtList
 为Mindustry支持的每个功能都设计语法并没有意义，所以本语言引入了原始语句。原始语句以`$`开头，到行尾结束，两者之间的字符会直接输出。
 
 这个特性使MindC几乎与Mindustry原生语言兼容：只要在Mindustry程序的每一行开头加上一个`$`，就可以得到一个合法的MindC程序。这种操作很容易使用编辑器（如VS Code）或命令行工具（如sed）完成。
+
+### 内存访问
+
+MindC使用数组语法操作内存元/内存库。方括号前的标识符应当是一个连接到处理器的内存元/内存库。例如，下列源代码：
+
+```
+temp = cell1[42]
+bank1[0] = temp
+```
+
+会被编译为：
+
+```
+read temp cell1 42
+write temp bank1 0
+```
 
 ### 分号
 
