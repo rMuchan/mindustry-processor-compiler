@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict, Tuple, Union
+from typing import Optional, List, Dict
 
 import g
 
@@ -60,10 +60,10 @@ class AssignStmt(Statement):
 
     def generate(self):
         if self.index is None:
-            self.value.generate(self.target)
+            self.value.generate_to(self.target)
         else:
-            value_var = Expression.generate_child(self.value)
-            index_var = Expression.generate_child(self.index)
+            value_var = self.value.generate()
+            index_var = self.index.generate()
             _emit(f'write {value_var} {self.target} {index_var}')
 
 
@@ -117,7 +117,7 @@ class ReturnStmt(Statement):
     def generate(self):
         name = self.belong_func.name
         if self.value is not None:
-            self.value.generate(f'$ret${name}')
+            self.value.generate_to(f'$ret${name}')
         _emit(f'set @counter $ra${name}')
 
     def _returns(self) -> bool:
@@ -154,39 +154,11 @@ class EmptyStmt(Statement):
         pass
 
 
-class Expression:
-    # normal instruction: (instruction name, operand 1, operand 2)
-    # the un-parameterized "tuple" is a reference to another node
-    NormalInstNode = Tuple[str, Union[str, tuple], Union[str, tuple]]
-    # function call: (function name, arguments, None)
-    FuncCallNode = Tuple[Function, List['Expression'], None]
-    # memory load: ((), cell link, index)
-    MemoryLoadNode = Tuple[tuple, str, 'Expression']
-    NodeType = Union[str, NormalInstNode, FuncCallNode, MemoryLoadNode]
-
-    value: NodeType
+class Expression(ABC):
     # not all bool expressions must be converted to 0/1 immediately, e.g. operands of logical operators.
     # the next two fields attempt to convert them as needed.
     type_is_bool: bool = False  # whether this expr is expected to return a bool value
     value_is_bool: bool = False  # whether this expr actually returns a bool value
-
-    def __init__(self, value: Union[NodeType, Function], args: List['Expression'] = None):
-        if args is None:
-            self.value = value
-        else:
-            assert isinstance(value, Function)
-            self.value = (value, args, None)
-
-    @staticmethod
-    def zero():
-        exp = Expression('0')
-        exp.type_is_bool = True
-        exp.value_is_bool = True
-        return exp
-
-    @staticmethod
-    def memory_load(cell: str, index: 'Expression'):
-        return Expression(((), cell, index))
 
     def convert_to_bool(self) -> 'Expression':
         """
@@ -195,44 +167,80 @@ class Expression:
         :return: The new expression if converted, otherwise `self`.
         """
         if self.type_is_bool and not self.value_is_bool:
-            exp = self.combine('not', Expression.zero(), True, convert_operand=False)
+            exp = OperationExpr('not', self, BaseExpr.zero(), True, convert_operand=False)
             exp.value_is_bool = True
             return exp
         else:
             return self
 
-    def combine(self, op: str, right: 'Expression', set_bool: Optional[bool],
-                convert_operand: bool = True) -> 'Expression':
+    def generate(self) -> str:
+        var = _get_next_temp()
+        self.generate_to(var)
+        return var
+
+    @abstractmethod
+    def generate_to(self, target: str): pass
+
+    def generate_condition(self, label: 'Label', invert: bool):
+        var = self.generate()
+        cond = 'equal' if invert else 'notEqual'
+        _emit(f'jump {{}} {cond} {var} 0', label)
+
+
+class BaseExpr(Expression):
+    value: str
+
+    @staticmethod
+    def zero():
+        exp = BaseExpr('0')
+        exp.type_is_bool = True
+        exp.value_is_bool = True
+        return exp
+
+    def __init__(self, val: str):
+        self.value = val
+
+    def generate(self) -> str:
+        return self.value
+
+    def generate_to(self, target: str):
+        _emit(f'set {target} {self.value}')
+
+
+class OperationExpr(Expression):
+    inst: str
+    opr1: Expression
+    opr2: Expression
+
+    def __init__(self, inst: str, opr1: Expression, opr2: Expression,
+                 set_bool: Optional[bool], convert_operand: bool = True):
         """
-        Create an expression object representing `self op right`. `type_is_bool` of the new expression is set to False.
-        :param op: Operation to perform. Should be a valid option for Mindustry `operation` instruction.
-        :param right: The second operand.
+        Create an expression object representing `opr1 inst opr2`. `type_is_bool` of the new expression is set to False.
+        :param inst: Operation to perform. Should be a valid option for Mindustry `operation` instruction.
+        :param opr1: The first operand.
+        :param opr2: The second operand.
         :param set_bool: Whether the new expr returns a bool value.
                          If given `None`, the new expr returns a bool value iff both operands return bool values.
         :param convert_operand: Whether the operands should be converted if their types are bool but values are not.
-        :return: The new expression.
         """
         if convert_operand:
-            left = self.convert_to_bool()
-            right = right.convert_to_bool()
-        else:
-            left = self
-        exp = Expression((op, self.value, right.value))
+            opr1 = opr1.convert_to_bool()
+            opr2 = opr2.convert_to_bool()
+        self.inst = inst
+        self.opr1 = opr1
+        self.opr2 = opr2
         if set_bool is None:
-            exp.value_is_bool = left.value_is_bool and right.value_is_bool
+            self.value_is_bool = opr1.value_is_bool and opr2.value_is_bool
         else:
-            exp.value_is_bool = set_bool
-        return exp
+            self.value_is_bool = set_bool
 
-    def generate(self, target: str):
-        Expression._generate_node(target, self.value)
+    def generate_to(self, target: str):
+        var1 = self.opr1.generate()
+        var2 = self.opr2.generate()
+        if target != '_':
+            _emit(f'op {self.inst} {target} {var1} {var2}')
 
     def generate_condition(self, label: 'Label', invert: bool):
-        if isinstance(self.value, str):
-            cond = 'equal' if invert else 'notEqual'
-            _emit(f'jump {{}} {cond} {self.value} 0', label)
-            return
-
         invert_map = {
             'equal': 'notEqual',
             'notEqual': 'equal',
@@ -242,59 +250,48 @@ class Expression:
             'greaterThanEq': 'lessThan'
         }
 
-        inst, opr1, opr2 = self.value
-        if inst in invert_map:  # last instruction is comparison
-            var1 = Expression.generate_child(opr1)
-            var2 = Expression.generate_child(opr2)
-            cond = invert_map[inst] if invert else inst
+        if self.inst in invert_map:  # comparison
+            var1 = self.opr1.generate()
+            var2 = self.opr2.generate()
+            cond = invert_map[self.inst] if invert else self.inst
             _emit(f'jump {{}} {cond} {var1} {var2}', label)
-        else:  # last instruction is computation or function invocation
-            var = _get_next_temp()
-            Expression._generate_node(var, self.value)
-            cond = 'equal' if invert else 'notEqual'
-            _emit(f'jump {{}} {cond} {var} 0', label)
+        else:  # computation
+            super().generate_condition(label, invert)
 
-    @staticmethod
-    def _generate_node(target: str, expr: NodeType):
-        if isinstance(expr, str):
-            _emit(f'set {target} {expr}')
-            return
-        inst, opr1, opr2 = expr
-        if isinstance(inst, str):  # instruction
-            opr1: Union[str, tuple]
-            opr2: Union[str, tuple]
-            var1 = Expression.generate_child(opr1)
-            var2 = Expression.generate_child(opr2)
-            if target != '_':
-                _emit(f'op {inst} {target} {var1} {var2}')
-        elif isinstance(inst, Function):  # function
-            inst: Function
-            opr1: List['Expression']
-            tmp_vars = []
-            for arg in opr1:
-                var = Expression.generate_child(arg)
-                tmp_vars.append(var)
-            for param_name, var in zip(inst.param, tmp_vars):
-                _emit(f'set {param_name} {var}')
-            _emit(f'op add $ra${inst.name} @counter 1')
-            _emit('jump {} always', inst.home_label)
-            if target != '_':
-                _emit(f'set {target} $ret${inst.name}')
-        else:  # memory load
-            opr1: str
-            opr2: 'Expression'
-            var = Expression.generate_child(opr2)
-            _emit(f'read {target} {opr1} {var}')
 
-    @staticmethod
-    def generate_child(opr: Union[NodeType, 'Expression']) -> str:
-        if isinstance(opr, Expression):
-            opr = opr.value
-        if isinstance(opr, str):
-            return opr
-        var = _get_next_temp()
-        Expression._generate_node(var, opr)
-        return var
+class FunctionExpr(Expression):
+    func: Function
+    args: List[Expression]
+
+    def __init__(self, func: Function, args: List[Expression]):
+        self.func = func
+        self.args = args
+
+    def generate_to(self, target: str):
+        tmp_vars = []
+        for arg in self.args:
+            var = arg.generate()
+            tmp_vars.append(var)
+        for param_name, var in zip(self.func.param, tmp_vars):
+            _emit(f'set {param_name} {var}')
+        _emit(f'op add $ra${self.func.name} @counter 1')
+        _emit('jump {} always', self.func.home_label)
+        if target != '_':
+            _emit(f'set {target} $ret${self.func.name}')
+
+
+class MemoryLoadExpr(Expression):
+    cell: str
+    index: Expression
+
+    def __init__(self, cell: str, index: Expression):
+        self.cell = cell
+        self.index = index
+
+    def generate_to(self, target: str):
+        var = self.index.generate()
+        if target != '_':
+            _emit(f'read {target} {self.cell} {var}')
 
 
 class Label:

@@ -165,7 +165,7 @@ def _create_expr_parser(sub_expr_parser: Callable[[], Expression], set_bool: Opt
         exp = sub_expr_parser()
         while _peek() in ops:
             op = ops[lex.read().type_]
-            exp = exp.combine(op, sub_expr_parser(), set_bool, convert_operand)
+            exp = OperationExpr(op, exp, sub_expr_parser(), set_bool, convert_operand)
             if type_is_bool:
                 exp.type_is_bool = True
         return exp
@@ -192,14 +192,14 @@ def unary_exp() -> Expression:
     exp = base_exp()
     for op in reversed(operations):
         if op == TokenType.SubOp:
-            exp = Expression.zero().combine('sub', exp, False)
+            exp = OperationExpr('sub', BaseExpr.zero(), exp, False)
         elif op == TokenType.BNotOp:
-            exp = exp.combine('not', Expression.zero(), False)
+            exp = OperationExpr('not', exp, BaseExpr.zero(), False)
         elif op == TokenType.LNotOp:
-            exp = exp.combine('equal', Expression.zero(), True, convert_operand=False)
+            exp = OperationExpr('equal', exp, BaseExpr.zero(), True, convert_operand=False)
             exp.type_is_bool = True
         elif op is double_not:
-            exp = exp.combine('notEqual', Expression.zero(), True, convert_operand=False)
+            exp = OperationExpr('notEqual', exp, BaseExpr.zero(), True, convert_operand=False)
             exp.type_is_bool = True
     return exp
 
@@ -236,7 +236,7 @@ def base_exp() -> Expression:
         return exp
     elif type_ == TokenType.Number:
         val = lex.read().value
-        return Expression(val)
+        return BaseExpr(val)
     elif type_ == TokenType.Identifier:
         tk = lex.read()
         if _peek() == TokenType.LPara:
@@ -245,9 +245,9 @@ def base_exp() -> Expression:
             lex.read()
             index = expression().convert_to_bool()
             _expect(TokenType.RBracket)
-            return Expression.memory_load(tk.value, index)
+            return MemoryLoadExpr(tk.value, index)
         else:
-            return Expression(tk.value)
+            return BaseExpr(tk.value)
     else:
         tk = lex.read()
         raise g.ParseError('Invalid expression.', tk.line, tk.pos)
@@ -289,10 +289,10 @@ def call(func_name_tk: Token) -> Expression:
         if exp.value_is_bool and func_name in _builtin_bool_identity:
             return exp
         set_bool = None if func_name in _builtin_preserve_bool else False
-        second_operand = args[1] if param_num == 2 else Expression.zero()
-        return exp.combine(func_name, second_operand, set_bool)
+        second_operand = args[1] if param_num == 2 else BaseExpr.zero()
+        return OperationExpr(func_name, exp, second_operand, set_bool)
     else:  # custom function
-        return Expression(func, args)
+        return FunctionExpr(func, args)
 
 
 _builtin_functions = {
